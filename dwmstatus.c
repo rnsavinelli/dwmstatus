@@ -4,28 +4,34 @@
 #include <stdarg.h>
 #include <string.h>
 #include <strings.h>
-#include <sys/time.h>
 #include <time.h>
+#include <fcntl.h>
+#include <sys/time.h>
 #include <sys/types.h>
 #include <sys/wait.h>
-
-#include <X11/Xlib.h>
-
 #include <sys/ioctl.h>
 #include <sys/stat.h>
 #include <sys/socket.h>
-#include <fcntl.h>
-#include <linux/wireless.h>
 
+#include <X11/Xlib.h>
+
+/* DISPLAY */
+static Display *g_dpy;
+
+/* SSID */
+#include <linux/wireless.h>
 #define IW_INTERFACE "wlp3s0"
 
+/* TIME */
+#define TZARGENTINA "America/Buenos_Aires"
 
+/* BRIGHTNESS */
+#define BLDIR "/sys/class/backlight/intel_backlight"
+#define BLMAX "max_brightness"
+#define BLACT "actual_brightness"
 
-char *tzargentina = "America/Buenos_Aires";
-
-static Display *dpy;
-
-char * smprintf(char *fmt, ...)
+char *
+smprintf(char *fmt, ...)
 {
 	va_list fmtargs;
 	char *ret;
@@ -48,12 +54,14 @@ char * smprintf(char *fmt, ...)
 	return ret;
 }
 
-void settz(char *tzname)
+void
+settz(char *tzname)
 {
 	setenv("TZ", tzname, 1);
 }
 
-char * mktimes(char *fmt, char *tzname)
+char *
+mktimes(char *fmt, char *tzname)
 {
 	char buf[129];
 	time_t tim;
@@ -73,7 +81,8 @@ char * mktimes(char *fmt, char *tzname)
 	return smprintf("%s", buf);
 }
 
-char * getssid(void)
+char *
+getssid(void)
 {
     struct iwreq wreq;
 	memset(&wreq, 0, sizeof(struct iwreq));
@@ -96,15 +105,17 @@ char * getssid(void)
 	return (char*)(wreq.u.essid.pointer);
 }
 
-void setstatus(char *str)
+void
+setstatus(char *str)
 {
-	XStoreName(dpy, DefaultRootWindow(dpy), str);
-	XSync(dpy, False);
+	XStoreName(g_dpy, DefaultRootWindow(g_dpy), str);
+	XSync(g_dpy, False);
 }
 
-char * readfile(char *base, char *file)
+char *
+readfile(const char *base, const char *file)
 {
-	char *path, line[513];
+	char *path, line[512+1]; /* 512 + EOF */
 	FILE *fd;
 
 	memset(line, 0, sizeof(line));
@@ -122,27 +133,42 @@ char * readfile(char *base, char *file)
 	return smprintf("%s", line);
 }
 
-int main(void)
+int
+getbrightness(const char *bldir ,const char *blact, const char * blmax)
+{
+    int act = atoi(readfile(bldir, blact));
+    int max = atoi(readfile(bldir, blmax));
+
+    return (act * 100) / max;
+}
+
+int
+main(void)
 {
 	char *status;
 	char *tmar;
+    char *ssid;
+    int brightness;
 
-	if (!(dpy = XOpenDisplay(NULL))) {
+    if (!(g_dpy = XOpenDisplay(NULL))) {
 		fprintf(stderr, "dwmstatus: cannot open display.\n");
 		return 1;
 	}
 
-	for (;;sleep(5)) {
-		tmar = mktimes("%B %d (%a) %H:%M", tzargentina);
+	for (;;sleep(2)) {
+		tmar = mktimes("%B %d (%a) %H:%M", TZARGENTINA);
+        brightness = getbrightness(BLDIR, BLACT, BLMAX);
+        ssid = getssid();
 
-		status = smprintf(" %s   %s ", getssid(), tmar);
+		status = smprintf(" B:%d%%   %s   %s ", brightness, ssid, tmar);
 		setstatus(status);
 
+        free(ssid);
 		free(tmar);
 		free(status);
 	}
 
-	XCloseDisplay(dpy);
+	XCloseDisplay(g_dpy);
 
 	return 0;
 }
