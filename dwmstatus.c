@@ -11,6 +11,16 @@
 
 #include <X11/Xlib.h>
 
+#include <sys/ioctl.h>
+#include <sys/stat.h>
+#include <sys/socket.h>
+#include <fcntl.h>
+#include <linux/wireless.h>
+
+#define IW_INTERFACE "wlp3s0"
+
+
+
 char *tzargentina = "America/Buenos_Aires";
 
 static Display *dpy;
@@ -38,8 +48,7 @@ char * smprintf(char *fmt, ...)
 	return ret;
 }
 
-void
-settz(char *tzname)
+void settz(char *tzname)
 {
 	setenv("TZ", tzname, 1);
 }
@@ -62,6 +71,29 @@ char * mktimes(char *fmt, char *tzname)
 	}
 
 	return smprintf("%s", buf);
+}
+
+char * getssid(void)
+{
+    struct iwreq wreq;
+	memset(&wreq, 0, sizeof(struct iwreq));
+	sprintf(wreq.ifr_name, IW_INTERFACE);
+
+	int sockfd;
+	if((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) == -1) {
+        perror("socket");
+		exit(1);
+	}
+
+	char *id = malloc(IW_ESSID_MAX_SIZE+1);
+	wreq.u.essid.pointer = id;
+	wreq.u.essid.length = IW_ESSID_MAX_SIZE;
+	if (ioctl(sockfd, SIOCGIWESSID, &wreq)) {
+        perror("essid");
+		exit(2);
+	}
+
+	return (char*)(wreq.u.essid.pointer);
 }
 
 void setstatus(char *str)
@@ -100,10 +132,10 @@ int main(void)
 		return 1;
 	}
 
-	for (;;sleep(4)) {
+	for (;;sleep(5)) {
 		tmar = mktimes("%B %d (%a) %H:%M", tzargentina);
 
-		status = smprintf("  %s ", tmar);
+		status = smprintf(" %s   %s ", getssid(), tmar);
 		setstatus(status);
 
 		free(tmar);
