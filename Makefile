@@ -1,49 +1,62 @@
-# See LICENSE file for copyright and license details.
+# See LICENSE file for copyright and license details
+# slstatus - suckless status monitor
+.POSIX:
 
 include config.mk
 
-SRC = ${NAME}.c
-OBJ = ${SRC:.c=.o}
+REQ = util
+COM =\
+	components/battery\
+	components/brightness\
+	components/cpu\
+	components/datetime\
+	components/disk\
+	components/hostname\
+	components/ip\
+	components/load_avg\
+	components/netspeeds\
+	components/ram\
+	components/run_command\
+	components/swap\
+	components/uptime\
+	components/user\
+	components/volume\
+	components/wifi
 
-all: options ${NAME}
+all: slstatus
 
-options:
-	@echo ${NAME} build options:
-	@echo "CFLAGS   = ${CFLAGS}"
-	@echo "LDFLAGS  = ${LDFLAGS}"
-	@echo "CC       = ${CC}"
+$(COM:=.o): config.mk $(REQ:=.h)
+slstatus.o: slstatus.c slstatus.h arg.h config.h config.mk $(REQ:=.h)
 
 .c.o:
-	@echo CC $<
-	@${CC} -c ${CFLAGS} $<
+	$(CC) -o $@ -c $(CPPFLAGS) $(CFLAGS) $<
 
-${OBJ}: config.mk
+config.h:
+	cp config.def.h $@
 
-${NAME}: ${OBJ}
-	@echo CC -o $@
-	@${CC} -o $@ ${OBJ} ${LDFLAGS}
+slstatus: slstatus.o $(COM:=.o) $(REQ:=.o)
+	$(CC) -o $@ $(LDFLAGS) $(COM:=.o) $(REQ:=.o) slstatus.o $(LDLIBS)
 
 clean:
-	@echo cleaning
-	@rm -f ${NAME} ${OBJ} ${NAME}-${VERSION}.tar.gz
+	rm -f slstatus slstatus.o $(COM:=.o) $(REQ:=.o)
 
-dist: clean
-	@echo creating dist tarball
-	@mkdir -p ${NAME}-${VERSION}
-	@cp -R Makefile LICENSE config.mk \
-		${SRC} ${NAME}-${VERSION}
-	@tar -cf ${NAME}-${VERSION}.tar ${NAME}-${VERSION}
-	@gzip ${NAME}-${VERSION}.tar
-	@rm -rf ${NAME}-${VERSION}
+dist:
+	rm -rf "slstatus-$(VERSION)"
+	mkdir -p "slstatus-$(VERSION)/components"
+	cp -R LICENSE Makefile README config.mk config.def.h \
+	      arg.h slstatus.c $(COM:=.c) $(REQ:=.c) $(REQ:=.h) \
+	      slstatus.1 "slstatus-$(VERSION)"
+	tar -cf - "slstatus-$(VERSION)" | gzip -c > "slstatus-$(VERSION).tar.gz"
+	rm -rf "slstatus-$(VERSION)"
 
 install: all
-	@echo installing executable file to ${DESTDIR}${PREFIX}/bin
-	@mkdir -p ${DESTDIR}${PREFIX}/bin
-	@cp -f ${NAME} ${DESTDIR}${PREFIX}/bin
-	@chmod 755 ${DESTDIR}${PREFIX}/bin/${NAME}
+	mkdir -p "$(DESTDIR)$(PREFIX)/bin"
+	cp -f slstatus "$(DESTDIR)$(PREFIX)/bin"
+	chmod 755 "$(DESTDIR)$(PREFIX)/bin/slstatus"
+	mkdir -p "$(DESTDIR)$(MANPREFIX)/man1"
+	cp -f slstatus.1 "$(DESTDIR)$(MANPREFIX)/man1"
+	chmod 644 "$(DESTDIR)$(MANPREFIX)/man1/slstatus.1"
 
 uninstall:
-	@echo removing executable file from ${DESTDIR}${PREFIX}/bin
-	@rm -f ${DESTDIR}${PREFIX}/bin/${NAME}
-
-.PHONY: all options clean dist install uninstall
+	rm -f "$(DESTDIR)$(PREFIX)/bin/slstatus"
+	rm -f "$(DESTDIR)$(MANPREFIX)/man1/slstatus.1"
